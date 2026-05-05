@@ -1,10 +1,11 @@
 const Fintech = require("../models/fintechModel");
 const User = require("../models/userModel");
 const jwt = require("jsonwebtoken");
+const sendVerificationEmail = require("../utils/mailer");
 
 //
 // ===============================
-// 🏦 FINTECH LOGIN (API KEY LOGIN)
+// 🏦 FINTECH LOGIN
 // ===============================
 const loginFintech = async (req, res) => {
   try {
@@ -32,12 +33,7 @@ const loginFintech = async (req, res) => {
     return res.json({
       message: "Fintech login successful",
       token,
-      fintech: {
-        name: fintech.name,
-        email: fintech.email,
-        bankCode: fintech.bankCode,
-        bankName: fintech.bankName
-      }
+      fintech
     });
 
   } catch (error) {
@@ -49,16 +45,14 @@ const loginFintech = async (req, res) => {
 
 //
 // ===============================
-// 👤 USER REGISTER
+// 👤 REGISTER (WITH EMAIL VERIFICATION)
 // ===============================
 const register = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // check if user exists
-    const existingUser = await User.findOne({ email });
-
-    if (existingUser) {
+    const existing = await User.findOne({ email });
+    if (existing) {
       return res.status(400).json({
         message: "User already exists"
       });
@@ -66,21 +60,44 @@ const register = async (req, res) => {
 
     const user = await User.create({
       email,
-      password
+      password,
+      isVerified: false
     });
 
+    const token = jwt.sign(
+      { userId: user._id },
+      process.env.JWT_SECRET,
+      { expiresIn: "1d" }
+    );
+
+    await sendVerificationEmail(email, token);
+
     return res.status(201).json({
-      message: "User registered successfully",
-      user: {
-        id: user._id,
-        email: user.email
-      }
+      message: "User created. Check email to verify account."
     });
 
   } catch (error) {
     return res.status(500).json({
       message: error.message
     });
+  }
+};
+
+//
+// ===============================
+// 📧 VERIFY EMAIL
+// ===============================
+const verifyEmail = async (req, res) => {
+  try {
+    const decoded = jwt.verify(req.params.token, process.env.JWT_SECRET);
+
+    await User.findByIdAndUpdate(decoded.userId, {
+      isVerified: true
+    });
+
+    res.send("Email verified successfully");
+  } catch (err) {
+    res.status(400).send("Invalid or expired link");
   }
 };
 
@@ -97,6 +114,12 @@ const login = async (req, res) => {
     if (!user || user.password !== password) {
       return res.status(401).json({
         message: "Invalid credentials"
+      });
+    }
+
+    if (!user.isVerified) {
+      return res.status(401).json({
+        message: "Please verify your email first"
       });
     }
 
@@ -123,10 +146,11 @@ const login = async (req, res) => {
 
 //
 // ===============================
-// 📦 EXPORT ALL CONTROLLERS
+// 📦 EXPORT ALL
 // ===============================
 module.exports = {
   loginFintech,
   register,
-  login
+  login,
+  verifyEmail
 };
