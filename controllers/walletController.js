@@ -5,10 +5,19 @@ const crypto = require("crypto");
 // generate reference
 const generateRef = () => crypto.randomBytes(8).toString("hex");
 
+//
+// ===============================
 // 💰 DEPOSIT
+// ===============================
 const deposit = async (req, res) => {
   try {
     const { accountNumber, amount } = req.body;
+
+    if (!accountNumber || !amount) {
+      return res.status(400).json({
+        message: "accountNumber and amount are required"
+      });
+    }
 
     const account = await Account.findOne({ accountNumber });
 
@@ -16,7 +25,7 @@ const deposit = async (req, res) => {
       return res.status(404).json({ message: "Account not found" });
     }
 
-    account.balance += amount;
+    account.balance = Number(account.balance) + Number(amount);
     await account.save();
 
     const transaction = await Transaction.create({
@@ -26,21 +35,30 @@ const deposit = async (req, res) => {
       reference: generateRef()
     });
 
-    res.json({
+    return res.json({
       message: "Deposit successful",
       balance: account.balance,
       transaction
     });
 
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({ message: error.message });
   }
 };
 
+//
+// ===============================
 // 💸 TRANSFER
+// ===============================
 const transfer = async (req, res) => {
   try {
     const { fromAccount, toAccount, amount } = req.body;
+
+    if (!fromAccount || !toAccount || !amount) {
+      return res.status(400).json({
+        message: "fromAccount, toAccount, amount are required"
+      });
+    }
 
     const sender = await Account.findOne({ accountNumber: fromAccount });
     const receiver = await Account.findOne({ accountNumber: toAccount });
@@ -53,8 +71,8 @@ const transfer = async (req, res) => {
       return res.status(400).json({ message: "Insufficient funds" });
     }
 
-    sender.balance -= amount;
-    receiver.balance += amount;
+    sender.balance = Number(sender.balance) - Number(amount);
+    receiver.balance = Number(receiver.balance) + Number(amount);
 
     await sender.save();
     await receiver.save();
@@ -67,17 +85,20 @@ const transfer = async (req, res) => {
       reference: generateRef()
     });
 
-    res.json({
+    return res.json({
       message: "Transfer successful",
       transaction
     });
 
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({ message: error.message });
   }
 };
 
-// 🧾 GET TRANSACTION HISTORY
+//
+// ===============================
+// 🧾 TRANSACTION HISTORY
+// ===============================
 const getTransactions = async (req, res) => {
   try {
     const { accountNumber } = req.params;
@@ -89,14 +110,18 @@ const getTransactions = async (req, res) => {
       ]
     }).sort({ createdAt: -1 });
 
-    res.json({
+    return res.json({
       count: transactions.length,
       transactions
     });
 
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({ message: error.message });
   }
 };
 
-module.exports = { deposit, transfer, getTransactions };
+module.exports = {
+  deposit,
+  transfer,
+  getTransactions
+};
